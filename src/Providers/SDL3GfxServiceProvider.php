@@ -7,6 +7,7 @@ use Fabricate\Contracts\Framebuffers\BufferFactory as FramebufferFactory;
 use Fabricate\Framebuffers\FormatSpec;
 use Fabricate\NutsAndBolts\ServiceProvider;
 use Fabricate\Rendering\RenderManager;
+use Microscrap\GFX\SDL3\Console\InstallSdl3DisplayCommand;
 use Microscrap\GFX\SDL3\Sdl3Framebuffer;
 use Microscrap\GFX\SDL3\SDL3GFXRenderDriver;
 
@@ -14,7 +15,11 @@ class SDL3GfxServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        $this->program->singleton(InstallSdl3DisplayCommand::class);
+
+        $this->commands([
+            InstallSdl3DisplayCommand::class,
+        ]);
     }
 
     /**
