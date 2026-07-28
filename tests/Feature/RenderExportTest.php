@@ -2,15 +2,21 @@
 
 namespace DeptOfScrapyardRobotics\Tests\Feature;
 
-use BareMetal\Contracts\Framebuffers\Enums\BitDepth;
-use BareMetal\Contracts\Framebuffers\Enums\Endianness;
-use BareMetal\Contracts\Framebuffers\Enums\PixelFormat;
-use BareMetal\Contracts\Framebuffers\Enums\RenderType;
-use BareMetal\GFX\RenderingLibraries;
+use Fabricate\Contracts\Framebuffers\Enums\BitDepth;
+use Fabricate\Contracts\Framebuffers\Enums\BitOrder;
+use Fabricate\Contracts\Framebuffers\Enums\Endianness;
+use Fabricate\Contracts\Framebuffers\Enums\PageAxis;
+use Fabricate\Contracts\Framebuffers\Enums\PixelFormat;
+use Fabricate\Contracts\Framebuffers\Enums\RenderType;
+use Fabricate\Contracts\Framebuffers\Enums\ScanDirection;
+use Fabricate\Framebuffers\FormatSpec;
 use Microscrap\Bindings\SDL3\Enums\PixelFormat as SdlPixelFormat;
 use Microscrap\Bindings\SDL3\Render;
 use Microscrap\Bindings\SDL3\Surface;
-use Microscrap\GFX\SDL3\Sdl3GFX;
+use Microscrap\GFX\SDL3\SDL3Gfx;
+use Microscrap\GFX\SDL3\Sdl3Framebuffer;
+
+require_once dirname(__DIR__).'/Helpers.php';
 
 beforeEach(function (): void {
     if (! extension_loaded('sdl3')) {
@@ -46,12 +52,29 @@ it('renders the same frame bytes across repeated exports', function (): void {
     expect($gfx->render()[0]->raw_data)->toBe($gfx->render()[0]->raw_data);
 });
 
+it('packs an SDL surface back into its embedded working format', function (): void {
+    $spec = new FormatSpec(
+        PixelFormat::MONO_VERTICAL_PAGE,
+        BitDepth::B1,
+        ScanDirection::TOP_TO_BOTTOM,
+        BitOrder::LSB_FIRST,
+        page_axis: PageAxis::VERTICAL,
+    );
+    $buffer = new Sdl3Framebuffer($spec, 8, 8);
+    $buffer->setPixel(0, 0, 1);
+
+    $frame = $buffer->dump()[0];
+
+    expect($frame->metadata)->toBe($spec)
+        ->and($frame->raw_data)->toBe([1, 0, 0, 0, 0, 0, 0, 0]);
+});
+
 it('attaches to an externally owned SDL renderer (windowed mode)', function (): void {
     $surface = Surface::createSurface(6, 6, SdlPixelFormat::SDL_PIXELFORMAT_RGBA8888);
     $renderer = Render::createSoftwareRenderer($surface->ptr);
 
     try {
-        $gfx = Sdl3GFX::windowed($renderer, 6, 6, sdlRgbaSpec());
+        $gfx = SDL3Gfx::windowed($renderer, 6, 6, sdlRgbaSpec());
 
         expect($gfx->buffer()->isHeadless())->toBeFalse();
 
@@ -67,6 +90,3 @@ it('attaches to an externally owned SDL renderer (windowed mode)', function (): 
     }
 });
 
-it('is registered as the sdl3 rendering library', function (): void {
-    expect(RenderingLibraries::resolve('sdl3'))->toBe(Sdl3GFX::class);
-});

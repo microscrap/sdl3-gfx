@@ -2,64 +2,35 @@
 
 namespace Microscrap\GFX\SDL3;
 
-use BareMetal\Contracts\Framebuffers\DTO\DumpedBuffer;
-use BareMetal\Contracts\Framebuffers\DTO\FormatSpec;
-use BareMetal\Contracts\Framebuffers\Framebuffer;
-use BareMetal\Framebuffers\FormatSpecFramebuffer;
-use BareMetal\GFX\Renderer2D;
+use Fabricate\Contracts\Framebuffers\Framebuffer;
+use Fabricate\Contracts\Rendering\RenderingException;
+use Fabricate\Framebuffers\DataObjects\DumpedBuffer;
+use Fabricate\Framebuffers\FormatSpec;
+use Fabricate\Rendering\Renderer2D;
 use Microscrap\Bindings\SDL3\DataObjects\SDLRenderer;
 use Microscrap\GFX\SDL3\Concerns\Sdl3GFXAPI;
 
 /**
- * SDL3-native renderer: the same drawing API surface as the software
- * PhpdafruitGFX, but every primitive resolves to SDL render calls against an
- * off-screen surface (headless) or a borrowed window renderer (windowed).
- *
- * Rects, fills, and axis-aligned lines map straight onto SDLRenderFillRect /
- * SDLRenderLine; circles, round rects, triangles, text, and bitmaps reuse the
- * Adafruit-style algorithms over drawPixel, so both GFX drivers rasterize the
- * same logical pixel grid.
+ * SDL3-native renderer. Drivers may construct unbound; factories attach the
+ * DisplayComponent-owned Sdl3Framebuffer via {@see useFramebuffer()}.
  *
  * @property-read int $height
  * @property-read int $width
- * @property int $rotation
  */
-class Sdl3GFX extends Renderer2D
+class SDL3Gfx extends Renderer2D
 {
     use Sdl3GFXAPI;
 
-    protected Sdl3Framebuffer $buffer;
+    protected ?Sdl3Framebuffer $buffer = null;
 
-    /**
-     * Accepts any framework framebuffer for DisplayComponent compatibility:
-     * an Sdl3Framebuffer is adopted as-is, anything else donates its
-     * FormatSpec and dimensions to a fresh headless SDL target.
-     *
-     * @throws Sdl3GFXException
-     */
-    public function __construct(Framebuffer $buffer)
+    public function __construct(?Framebuffer $buffer = null)
     {
-        $this->buffer = ($buffer instanceof Sdl3Framebuffer)
-            ? $buffer
-            : static::adoptForeignBuffer($buffer);
+        if (! is_null($buffer)) {
+            $this->useFramebuffer($buffer);
+        }
     }
 
     /**
-     * @throws Sdl3GFXException
-     */
-    protected static function adoptForeignBuffer(Framebuffer $buffer): Sdl3Framebuffer
-    {
-        $format_spec = ($buffer instanceof FormatSpecFramebuffer)
-            ? $buffer->formatSpec()
-            : Sdl3Framebuffer::rgbaSpec();
-
-        return new Sdl3Framebuffer($format_spec, $buffer->viewportWidth(), $buffer->viewportHeight());
-    }
-
-    /**
-     * Off-screen surface + software renderer; works under SDL_Init(0), no
-     * window or video subsystem required.
-     *
      * @throws Sdl3GFXException
      */
     public static function headless(int $width, int $height, ?FormatSpec $format_spec = null): static
@@ -68,9 +39,6 @@ class Sdl3GFX extends Renderer2D
     }
 
     /**
-     * Draw through an existing SDL renderer (typically one attached to a
-     * window); the caller keeps ownership of the renderer's lifetime.
-     *
      * @throws Sdl3GFXException
      */
     public static function windowed(SDLRenderer $renderer, int $width, int $height, ?FormatSpec $format_spec = null): static
@@ -83,15 +51,30 @@ class Sdl3GFX extends Renderer2D
         ));
     }
 
+    public function useFramebuffer(Framebuffer $framebuffer): static
+    {
+        if (! $this->supportsFramebuffer($framebuffer)) {
+            throw Sdl3GFXException::unsupportedFramebuffer($framebuffer::class);
+        }
+
+        $this->buffer = $framebuffer;
+
+        return $this;
+    }
+
+    public function supportsFramebuffer(Framebuffer $framebuffer): bool
+    {
+        return $framebuffer instanceof Sdl3Framebuffer;
+    }
+
     public function drawPixel(int $x, int $y, int $color): static
     {
-        // Bounds check in logical coordinates
-        if (($x < 0) || ($y < 0) || ($x >= $this->width) || ($y >= $this->height)) {
+        if (($x < 0) || ($y < 0) || ($x >= $this->width()) || ($y >= $this->height())) {
             return $this;
         }
 
         [$x, $y] = $this->applyRotation($x, $y);
-        $this->buffer->point($x, $y, $color);
+        $this->requireBuffer()->point($x, $y, $color);
 
         return $this;
     }
@@ -132,35 +115,29 @@ class Sdl3GFX extends Renderer2D
 
     public function fill(int $color): static
     {
-        $this->buffer->clear($color);
+        $this->requireBuffer()->clear($color);
 
         return $this;
     }
 
-    /**
-     * Flush queued SDL draw commands (present the frame in windowed mode).
-     */
     public function present(): static
     {
-        $this->buffer->present();
+        $this->requireBuffer()->present();
 
         return $this;
     }
 
     public function buffer(): Sdl3Framebuffer
     {
-        return $this->buffer;
+        return $this->requireBuffer();
     }
 
     /**
-     * Read the SDL target back and emit it as one FULL ROW_MAJOR B32 frame —
-     * the "SDL buffer flushed to an embedded display" path.
-     *
      * @return array<int, DumpedBuffer>
      */
     public function render(): array
     {
-        return $this->buffer->dump();
+        return $this->requireBuffer()->dump();
     }
 
     /**
@@ -193,5 +170,14 @@ class Sdl3GFX extends Renderer2D
             'rotation' => $this->setRotation((int) $value),
             default => throw Sdl3GFXException::invalidProperty($name, static::class),
         };
+    }
+
+    protected function requireBuffer(): Sdl3Framebuffer
+    {
+        if (is_null($this->buffer)) {
+            throw RenderingException::framebufferNotAttached(static::class);
+        }
+
+        return $this->buffer;
     }
 }

@@ -2,13 +2,17 @@
 
 namespace Microscrap\GFX\SDL3;
 
-use BareMetal\Contracts\Framebuffers\DTO\DumpedBuffer;
-use BareMetal\Contracts\Framebuffers\DTO\FormatSpec;
-use BareMetal\Contracts\Framebuffers\Enums\BitDepth;
-use BareMetal\Contracts\Framebuffers\Enums\Endianness;
-use BareMetal\Contracts\Framebuffers\Enums\PixelFormat;
-use BareMetal\Contracts\Framebuffers\Enums\RenderType;
-use BareMetal\Contracts\Framebuffers\Framebuffer;
+use Fabricate\Contracts\Displays\Display;
+use Fabricate\Contracts\Framebuffers\Enums\BitDepth;
+use Fabricate\Contracts\Framebuffers\Enums\Endianness;
+use Fabricate\Contracts\Framebuffers\Enums\PixelFormat;
+use Fabricate\Contracts\Framebuffers\Enums\RenderType;
+use Fabricate\Contracts\Framebuffers\Framebuffer;
+use Fabricate\Contracts\Framebuffers\SoftwareRenderableFramebuffer;
+use Fabricate\Contracts\Rendering\GFXRenderer;
+use Fabricate\Framebuffers\DataObjects\DumpedBuffer;
+use Fabricate\Framebuffers\FormatSpec;
+use Fabricate\Framebuffers\Packers\PixelPackers;
 use Microscrap\Bindings\SDL3\DataObjects\SDLRenderer;
 use Microscrap\Bindings\SDL3\DataObjects\SDLSurfaceRef;
 use Microscrap\Bindings\SDL3\Enums\PixelFormat as SdlPixelFormat;
@@ -27,11 +31,10 @@ use Microscrap\Bindings\SDL3\Surface;
  *
  * The FormatSpec passed in is the *working* spec: it decides how GFX color
  * ints (mono 0/1, RGB565, RGB888, RGBA8888…) map onto SDL RGBA draw colors,
- * and what value {@see getPixel()} reports back. Dumps always leave as
- * ROW_MAJOR B32 RGBA bytes regardless — the "SDL buffer flushed to an
- * embedded display" path.
+ * and what value {@see getPixel()} reports back. Dumps are packed back into
+ * that working spec, allowing SDL drawing to target native embedded formats.
  */
-class Sdl3Framebuffer implements Framebuffer
+class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
 {
     protected ?SDLSurfaceRef $surface = null;
 
@@ -274,31 +277,129 @@ class Sdl3Framebuffer implements Framebuffer
     }
 
     /**
-     * One FULL ROW_MAJOR B32 frame: R,G,B,A bytes per pixel, red byte first —
-     * the same shape the framework's RGBA encoders emit.
-     *
      * @return array<int, DumpedBuffer>
      */
     public function dump(): array
     {
-        $bytes = [];
+        $words = $this->readPixelWords();
 
-        foreach ($this->readPixelWords() as $word) {
-            $bytes[] = ($word >> 24) & 0xFF;
-            $bytes[] = ($word >> 16) & 0xFF;
-            $bytes[] = ($word >> 8) & 0xFF;
-            $bytes[] = $word & 0xFF;
+        // Working B32 ROW_MAJOR already matches dump layout — pack words
+        // straight to bytes and skip the width×height nested array.
+        if (
+            $this->format_spec->bit_depth === BitDepth::B32
+            && $this->format_spec->pixel_format === PixelFormat::ROW_MAJOR
+            && ($this->format_spec->endianness ?? Endianness::MSB) === Endianness::MSB
+        ) {
+            $bytes = [];
+
+            foreach ($words as $word) {
+                $bytes[] = ($word >> 24) & 0xFF;
+                $bytes[] = ($word >> 16) & 0xFF;
+                $bytes[] = ($word >> 8) & 0xFF;
+                $bytes[] = $word & 0xFF;
+            }
+
+            return [
+                new DumpedBuffer(
+                    RenderType::FULL,
+                    $this->format_spec,
+                    $bytes,
+                    width: $this->width,
+                    height: $this->height,
+                ),
+            ];
+        }
+
+        $pixels = [];
+
+        for ($y = 0; $y < $this->height; $y++) {
+            $row = [];
+
+            for ($x = 0; $x < $this->width; $x++) {
+                $row[] = $this->unmapColor($words[($y * $this->width) + $x] ?? 0);
+            }
+
+            $pixels[] = $row;
         }
 
         return [
             new DumpedBuffer(
                 RenderType::FULL,
-                static::rgbaSpec(),
-                $bytes,
+                $this->format_spec,
+                PixelPackers::resolve($this->format_spec->pixel_format)->pack(
+                    $pixels,
+                    $this->format_spec,
+                    $this->width,
+                    $this->height,
+                ),
                 width: $this->width,
                 height: $this->height,
             ),
         ];
+    }
+
+    /**
+     * Windowed (attached) buffers already draw into the display's SDL
+     * renderer — present in place and skip the readback→pack→upload path.
+     *
+     * @return array<int, DumpedBuffer>
+     */
+    public function flush(): array
+    {
+        if (! $this->isHeadless()) {
+            $this->present();
+
+            return [];
+        }
+
+        return $this->dump();
+    }
+
+    /**
+     * Rebind a headless buffer onto a windowed SDL3 panel's live renderer.
+     *
+     * Called by PendingVisualPresentation when the display panel exposes
+     * renderer() (SDL3Window). Returns $this when already attached or when
+     * the display has no SDL renderer to share.
+     */
+    public function bindDisplaySurface(Display $display): static
+    {
+        if (! $this->isHeadless()) {
+            return $this;
+        }
+
+        if (! method_exists($display, 'panel')) {
+            return $this;
+        }
+
+        $panel = $display->panel();
+
+        if (! is_object($panel) || ! method_exists($panel, 'renderer')) {
+            return $this;
+        }
+
+        $renderer = $panel->renderer();
+
+        if (! $renderer instanceof SDLRenderer) {
+            return $this;
+        }
+
+        return static::attachedTo(
+            $renderer,
+            $this->format_spec,
+            $this->width,
+            $this->height,
+        );
+    }
+
+    public function supportsDisplay(Display $display): bool
+    {
+        return true;
+    }
+
+    public function supportsRenderer(GFXRenderer $renderer): bool
+    {
+        return true;
     }
 
     // -- Color seam --------------------------------------------------------------
@@ -323,7 +424,9 @@ class Sdl3Framebuffer implements Framebuffer
 
         return match ($this->format_spec->bit_depth) {
             BitDepth::B8 => [$color & 0xFF, $color & 0xFF, $color & 0xFF, 255],
+            BitDepth::B12 => $this->expandRgb444($color),
             BitDepth::B16 => $this->expandRgb565($color),
+            BitDepth::B18 => $this->expandRgb666($color),
             BitDepth::B32 => [($color >> 24) & 0xFF, ($color >> 16) & 0xFF, ($color >> 8) & 0xFF, $color & 0xFF],
             default => [($color >> 16) & 0xFF, ($color >> 8) & 0xFF, $color & 0xFF, 255],
         };
@@ -344,7 +447,9 @@ class Sdl3Framebuffer implements Framebuffer
 
         return match ($this->format_spec->bit_depth) {
             BitDepth::B8 => $r,
+            BitDepth::B12 => (($r >> 4) << 8) | (($g >> 4) << 4) | ($b >> 4),
             BitDepth::B16 => (($r >> 3) << 11) | (($g >> 2) << 5) | ($b >> 3),
+            BitDepth::B18 => (($r & 0xFC) << 16) | (($g & 0xFC) << 8) | ($b & 0xFC),
             BitDepth::B32 => $rgba_word,
             default => ($r << 16) | ($g << 8) | $b,
         };
@@ -363,6 +468,20 @@ class Sdl3Framebuffer implements Framebuffer
      *
      * @return array{0: int, 1: int, 2: int, 3: int}
      */
+    protected function expandRgb444(int $color): array
+    {
+        $r4 = ($color >> 8) & 0xF;
+        $g4 = ($color >> 4) & 0xF;
+        $b4 = $color & 0xF;
+
+        return [
+            ($r4 << 4) | $r4,
+            ($g4 << 4) | $g4,
+            ($b4 << 4) | $b4,
+            255,
+        ];
+    }
+
     protected function expandRgb565(int $color): array
     {
         $r5 = ($color >> 11) & 0x1F;
@@ -373,6 +492,25 @@ class Sdl3Framebuffer implements Framebuffer
             ($r5 << 3) | ($r5 >> 2),
             ($g6 << 2) | ($g6 >> 4),
             ($b5 << 3) | ($b5 >> 2),
+            255,
+        ];
+    }
+
+    /**
+     * Left-justified RGB666 word → RGBA draw color.
+     *
+     * @return array{0: int, 1: int, 2: int, 3: int}
+     */
+    protected function expandRgb666(int $color): array
+    {
+        $r6 = ($color >> 18) & 0x3F;
+        $g6 = ($color >> 10) & 0x3F;
+        $b6 = ($color >> 2) & 0x3F;
+
+        return [
+            ($r6 << 2) | ($r6 >> 4),
+            ($g6 << 2) | ($g6 >> 4),
+            ($b6 << 2) | ($b6 >> 4),
             255,
         ];
     }

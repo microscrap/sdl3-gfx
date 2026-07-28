@@ -2,11 +2,11 @@
 
 namespace Microscrap\GFX\SDL3\Concerns;
 
-use BareMetal\GFX\Fonts\ClassicFont;
-use BareMetal\GFX\Fonts\GFXFont;
+use Fabricate\Rendering\Fonts\ClassicFont;
+use Fabricate\Rendering\Fonts\GFXFont;
 
 /**
- * Text rendering over the renderer-agnostic BareMetal\GFX\Fonts classes —
+ * Text rendering over Fabricate's renderer-agnostic font classes —
  * glyphs decode straight into drawPixel/fillRect calls, no dependency on the
  * software phpdafruit renderer.
  */
@@ -283,14 +283,16 @@ trait Sdl3Text
         return $this;
     }
 
-    public function setFont(?GFXFont $f = null): static
+    public function setFont(object|string|null $f = null): static
     {
-        if (! is_null($f)) {
+        $resolved = $this->resolveFontArgument($f);
+
+        if (! is_null($resolved)) {
             if (is_null($this->font)) {
                 // Switching from classic to custom font.
                 // Adafruit custom fonts use baseline-based y offsets; LVGL fonts in this
                 // project use line-based offsets and don't need this legacy shift.
-                if ($f->getFontEncoding() !== 'lvgl') {
+                if ($resolved->getFontEncoding() !== 'lvgl') {
                     $this->cursor_y += 6;
                 }
             }
@@ -302,9 +304,40 @@ trait Sdl3Text
             }
         }
 
-        $this->font = $f;
+        $this->font = $resolved;
 
         return $this;
+    }
+
+    /**
+     * Resolve a setFont argument to a custom GFXFont instance, or null for classic.
+     *
+     * The classic font stays on the optimized null path — registering ClassicFont
+     * via the FontRegistry is for discovery/about, not for this drawing path.
+     */
+    protected function resolveFontArgument(object|string|null $f): ?GFXFont
+    {
+        if (is_null($f)) {
+            return null;
+        }
+
+        if (is_string($f)) {
+            if ($f === 'classic') {
+                return null;
+            }
+
+            $resolved = app('font')->font($f);
+
+            return $resolved instanceof ClassicFont ? null : $resolved;
+        }
+
+        if (! $f instanceof GFXFont) {
+            throw new \InvalidArgumentException(
+                'setFont() expects a GFXFont instance, registered font name, or null.'
+            );
+        }
+
+        return $f instanceof ClassicFont ? null : $f;
     }
 
     public function setCp437(bool $enable): static

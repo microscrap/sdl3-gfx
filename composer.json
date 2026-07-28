@@ -3,7 +3,7 @@
     "description": "SDL3-native Rendering Package for the ScrapyardIO Framework",
     "license": "MIT",
     "homepage": "https://scrapyard-io.projectsaturnstudios.com",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "authors": [
         {
             "name": "Angel Gonzalez",
@@ -13,30 +13,15 @@
     "require": {
         "php": "^8.3",
         "ext-sdl3": "^0.5.0",
-        "bare-metal/gfx": "^0.5.0",
+        "fabricate/framebuffers": "^0.6.0",
+        "fabricate/nuts-and-bolts": "^0.6.0",
+        "fabricate/rendering": "^0.6.0",
         "microscrap/sdl3": "^0.5.0",
-        "bare-metal/contracts": "^0.5.0",
-        "bare-metal/framebuffers": "^0.5.0"
+        "fabricate/contracts": "^0.6.0"
     },
     "require-dev": {
         "pestphp/pest": "^4"
     },
-    "repositories": [
-        {
-            "type": "path",
-            "url": "../../scrapyard-io/framework",
-            "options": {
-                "symlink": true
-            }
-        },
-        {
-            "type": "path",
-            "url": "../sdl3",
-            "options": {
-                "symlink": true
-            }
-        }
-    ],
     "autoload": {
         "psr-4": {
             "Microscrap\\GFX\\SDL3\\": "src/"
@@ -53,5 +38,15 @@
             "pestphp/pest-plugin": true
         }
     },
-    "minimum-stability": "dev"
+    "minimum-stability": "dev",
+    "extra": {
+        "scrapyard-io": {
+            "providers": [
+                "Microscrap\\GFX\\SDL3\\Providers\\SDL3GfxServiceProvider"
+            ]
+        },
+        "branch-alias": {
+            "dev-master": "0.6.x-dev"
+        }
+    }
 }

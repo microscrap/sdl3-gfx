@@ -2,14 +2,16 @@
 
 namespace DeptOfScrapyardRobotics\Tests\Unit;
 
-use BareMetal\Contracts\Framebuffers\DTO\FormatSpec;
-use BareMetal\Contracts\Framebuffers\Enums\BitDepth;
-use BareMetal\Contracts\Framebuffers\Enums\PixelFormat;
-use BareMetal\Framebuffers\FullFramebuffer;
+use Fabricate\Contracts\Framebuffers\Enums\BitDepth;
+use Fabricate\Contracts\Framebuffers\Enums\PixelFormat;
+use Fabricate\Framebuffers\FormatSpec;
+use Fabricate\Framebuffers\Strategy\FullFramebuffer;
 use Microscrap\GFX\SDL3\Sdl3Framebuffer;
-use Microscrap\GFX\SDL3\Sdl3GFX;
+use Microscrap\GFX\SDL3\SDL3Gfx;
 use Microscrap\GFX\SDL3\Sdl3GFXException;
 use OutOfBoundsException;
+
+require_once dirname(__DIR__).'/Helpers.php';
 
 beforeEach(function (): void {
     if (! extension_loaded('sdl3')) {
@@ -27,19 +29,15 @@ describe('construction', function (): void {
             ->and($gfx->height())->toBe(8);
     });
 
-    it('adopts a foreign framebuffer by borrowing its spec and dimensions', function (): void {
+    it('rejects a foreign framebuffer', function (): void {
         $foreign = new FullFramebuffer(10, 6, new FormatSpec(PixelFormat::ROW_MAJOR, BitDepth::B16));
 
-        $gfx = new Sdl3GFX($foreign);
-
-        expect($gfx->buffer())->toBeInstanceOf(Sdl3Framebuffer::class)
-            ->and($gfx->buffer()->viewportWidth())->toBe(10)
-            ->and($gfx->buffer()->viewportHeight())->toBe(6)
-            ->and($gfx->buffer()->formatSpec()->bit_depth)->toBe(BitDepth::B16);
+        expect(fn () => new SDL3Gfx($foreign))
+            ->toThrow(Sdl3GFXException::class);
     });
 
     it('returns its own SDL framebuffer as the preferred framebuffer', function (): void {
-        $buffer = Sdl3GFX::preferredFramebuffer(sdlRgbaSpec(), 12, 5);
+        $buffer = SDL3Gfx::preferredFramebuffer(sdlRgbaSpec(), 12, 5);
 
         expect($buffer)->toBeInstanceOf(Sdl3Framebuffer::class)
             ->and($buffer->viewportWidth())->toBe(12)
@@ -274,7 +272,7 @@ describe('bitmaps', function (): void {
 describe('color mapping seam', function (): void {
     it('maps mono colors to black and white', function (): void {
         $spec = new FormatSpec(PixelFormat::MONO_VERTICAL_PAGE, BitDepth::B1);
-        $gfx = Sdl3GFX::headless(4, 4, $spec)
+        $gfx = SDL3Gfx::headless(4, 4, $spec)
             ->drawPixel(0, 0, 1)
             ->drawPixel(1, 0, 0);
 
@@ -284,21 +282,21 @@ describe('color mapping seam', function (): void {
 
     it('expands RGB565 colors by bit replication', function (): void {
         $spec = new FormatSpec(PixelFormat::ROW_MAJOR, BitDepth::B16);
-        $gfx = Sdl3GFX::headless(4, 4, $spec)->drawPixel(0, 0, 0xF800);
+        $gfx = SDL3Gfx::headless(4, 4, $spec)->drawPixel(0, 0, 0xF800);
 
         expect(sdlWord($gfx, 0, 0))->toBe(0xFF0000FF);
     });
 
     it('treats RGB888 as the default mapping', function (): void {
         $spec = new FormatSpec(PixelFormat::ROW_MAJOR, BitDepth::B24);
-        $gfx = Sdl3GFX::headless(4, 4, $spec)->drawPixel(0, 0, 0x00FF00);
+        $gfx = SDL3Gfx::headless(4, 4, $spec)->drawPixel(0, 0, 0x00FF00);
 
         expect(sdlWord($gfx, 0, 0))->toBe(0x00FF00FF);
     });
 
     it('round-trips working-spec colors through getPixel', function (): void {
         $spec = new FormatSpec(PixelFormat::ROW_MAJOR, BitDepth::B16);
-        $gfx = Sdl3GFX::headless(4, 4, $spec)->drawPixel(2, 1, 0x07E0);
+        $gfx = SDL3Gfx::headless(4, 4, $spec)->drawPixel(2, 1, 0x07E0);
 
         expect($gfx->buffer()->getPixel(2, 1))->toBe(0x07E0);
     });

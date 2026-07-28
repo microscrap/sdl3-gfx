@@ -2,9 +2,9 @@
 
 namespace Microscrap\GFX\SDL3;
 
-use BareMetal\Contracts\GFX\RendererException;
+use Fabricate\Contracts\Rendering\RenderingException;
 
-class Sdl3GFXException extends RendererException
+class Sdl3GFXException extends RenderingException
 {
     public static function surfaceCreationFailed(int $width, int $height, string $sdl_error = ''): static
     {
@@ -23,5 +23,10 @@ class Sdl3GFXException extends RendererException
     public static function invalidProperty(string $name, string $class): static
     {
         return new static("Unknown property {$name} on {$class}.");
+    }
+
+    public static function unsupportedFramebuffer(string $class): static
+    {
+        return new static("SDL3 rendering requires an ".Sdl3Framebuffer::class."; {$class} given.");
     }
 }
