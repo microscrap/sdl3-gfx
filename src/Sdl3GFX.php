@@ -73,6 +73,10 @@ class SDL3Gfx extends Renderer2D
             return $this;
         }
 
+        if (! $this->clipAllows($x, $y)) {
+            return $this;
+        }
+
         [$x, $y] = $this->applyRotation($x, $y);
         $this->requireBuffer()->point($x, $y, $color);
 
@@ -115,6 +119,14 @@ class SDL3Gfx extends Renderer2D
 
     public function fill(int $color): static
     {
+        $clip = $this->clip();
+
+        // A native clear ignores the clip entirely, so a clipped fill has to go
+        // through the rect path and cover just the clip region.
+        if (! is_null($clip)) {
+            return $this->fillRect($clip->x, $clip->y, $clip->width, $clip->height, $color);
+        }
+
         $this->requireBuffer()->clear($color);
 
         return $this;

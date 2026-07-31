@@ -10,6 +10,7 @@ use Fabricate\Contracts\Framebuffers\Enums\RenderType;
 use Fabricate\Contracts\Framebuffers\Framebuffer;
 use Fabricate\Contracts\Framebuffers\SoftwareRenderableFramebuffer;
 use Fabricate\Contracts\Rendering\GFXRenderer;
+use Fabricate\Framebuffers\DataObjects\DamageGranularity;
 use Fabricate\Framebuffers\DataObjects\DumpedBuffer;
 use Fabricate\Framebuffers\FormatSpec;
 use Fabricate\Framebuffers\Packers\PixelPackers;
@@ -400,6 +401,25 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
     public function supportsRenderer(GFXRenderer $renderer): bool
     {
         return true;
+    }
+
+    /**
+     * Dumps are always RenderType::FULL and attached buffers present natively,
+     * so there is no sub-surface transmit unit to snap damage to.
+     */
+    public function damageGranularity(): DamageGranularity
+    {
+        return DamageGranularity::wholeSurface($this->width, $this->height);
+    }
+
+    /**
+     * Headless buffers keep their offscreen surface, but SDL leaves a windowed
+     * renderer's backbuffer undefined once presented, so retained partial
+     * repaint cannot be trusted there.
+     */
+    public function preservesContentsOnPresent(): bool
+    {
+        return $this->isHeadless();
     }
 
     // -- Color seam --------------------------------------------------------------

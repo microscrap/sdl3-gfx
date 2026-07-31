@@ -83,6 +83,16 @@ trait Sdl3Rects
             return $this;
         }
 
+        // Intersect the active clip in logical space, before rotation, so a
+        // rejected fill never reaches the buffer.
+        $segment = $this->clipSegment($x, $y, $width, $height);
+
+        if (is_null($segment)) {
+            return $this;
+        }
+
+        [$x, $y, $width, $height] = [$segment->x, $segment->y, $segment->width, $segment->height];
+
         // Clip to the logical viewport
         $left = max(0, $x);
         $top = max(0, $y);
