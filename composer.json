@@ -3,7 +3,7 @@
     "description": "SDL3-native Rendering Package for the ScrapyardIO Framework",
     "license": "MIT",
     "homepage": "https://scrapyard-io.projectsaturnstudios.com",
-    "version": "0.6.3",
+    "version": "0.6.4",
     "authors": [
         {
             "name": "Angel Gonzalez",
