@@ -2,18 +2,6 @@
 
 namespace Microscrap\GFX\SDL3;
 
-use Fabricate\Contracts\Displays\Display;
-use Fabricate\Contracts\Framebuffers\Enums\BitDepth;
-use Fabricate\Contracts\Framebuffers\Enums\Endianness;
-use Fabricate\Contracts\Framebuffers\Enums\PixelFormat;
-use Fabricate\Contracts\Framebuffers\Enums\RenderType;
-use Fabricate\Contracts\Framebuffers\Framebuffer;
-use Fabricate\Contracts\Framebuffers\SoftwareRenderableFramebuffer;
-use Fabricate\Contracts\Rendering\GFXRenderer;
-use Fabricate\Framebuffers\DataObjects\DamageGranularity;
-use Fabricate\Framebuffers\DataObjects\DumpedBuffer;
-use Fabricate\Framebuffers\FormatSpec;
-use Fabricate\Framebuffers\Packers\PixelPackers;
 use Microscrap\Bindings\SDL3\DataObjects\SDLRenderer;
 use Microscrap\Bindings\SDL3\DataObjects\SDLSurfaceRef;
 use Microscrap\Bindings\SDL3\Enums\PixelFormat as SdlPixelFormat;
@@ -21,21 +9,26 @@ use Microscrap\Bindings\SDL3\Error;
 use Microscrap\Bindings\SDL3\Init;
 use Microscrap\Bindings\SDL3\Render;
 use Microscrap\Bindings\SDL3\Surface;
+use ScrapyardIO\Tubes\Contracts\Framebuffers\DamageGranularity;
+use ScrapyardIO\Tubes\Contracts\Framebuffers\DumpedBuffer;
+use ScrapyardIO\Tubes\Contracts\Framebuffers\Enums\BitDepth;
+use ScrapyardIO\Tubes\Contracts\Framebuffers\Enums\Endianness;
+use ScrapyardIO\Tubes\Contracts\Framebuffers\Enums\PixelFormat;
+use ScrapyardIO\Tubes\Contracts\Framebuffers\Enums\RenderType;
+use ScrapyardIO\Tubes\Contracts\Framebuffers\FormatSpec;
+use ScrapyardIO\Tubes\Framebuffers\DeferredFramebuffer;
 
 /**
- * A Framebuffer whose pixels live inside SDL rather than a PHP grid.
+ * Deferred (host-backed) framebuffer: pixels live in SDL, not a PHP PixelStore.
  *
- * Headless construction owns an off-screen RGBA8888 surface plus a software
- * renderer (works under SDL_Init(0), no window/video subsystem needed);
- * {@see attachedTo()} borrows an existing SDL renderer instead (windowed
- * mode) and never destroys it.
+ * Default construction is headless — owns an off-screen RGBA8888 surface plus a
+ * software renderer via microscrap/sdl3 (no window / video subsystem required).
+ * {@see attachedTo()} borrows an existing SDL renderer (windowed) and never
+ * destroys it.
  *
- * The FormatSpec passed in is the *working* spec: it decides how GFX color
- * ints (mono 0/1, RGB565, RGB888, RGBA8888…) map onto SDL RGBA draw colors,
- * and what value {@see getPixel()} reports back. Dumps are packed back into
- * that working spec, allowing SDL drawing to target native embedded formats.
+ * Soft Managed drivers (`full` / `dirty` / `page`) are a different lane.
  */
-class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
+class Sdl3Framebuffer extends DeferredFramebuffer
 {
     protected ?SDLSurfaceRef $surface = null;
 
@@ -47,11 +40,13 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
      * @throws Sdl3GFXException
      */
     public function __construct(
-        protected FormatSpec $format_spec,
-        protected int $width,
-        protected int $height,
+        int $width,
+        int $height,
+        FormatSpec $format_spec,
         ?SDLRenderer $attach_to = null,
     ) {
+        parent::__construct($width, $height, $format_spec);
+
         if (! is_null($attach_to)) {
             $this->renderer = $attach_to;
             $this->owns_sdl_objects = false;
@@ -91,27 +86,35 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
     }
 
     /**
-     * Windowed mode: draw through an SDL renderer someone else owns
-     * (typically the one attached to an application window).
+     * Headless factory: SDL soft surface + software renderer (no window).
      *
      * @throws Sdl3GFXException
      */
-    public static function attachedTo(SDLRenderer $renderer, FormatSpec $format_spec, int $width, int $height): static
+    public static function sized(int $width, int $height, FormatSpec $host_format): static
     {
-        return new static($format_spec, $width, $height, $renderer);
+        return new static($width, $height, $host_format);
     }
 
     /**
-     * The spec every dump leaves with: row-major RGBA8888, red byte first.
+     * Windowed mode: draw through an SDL renderer someone else owns.
+     *
+     * @throws Sdl3GFXException
+     */
+    public static function attachedTo(
+        SDLRenderer $renderer,
+        FormatSpec $format_spec,
+        int $width,
+        int $height,
+    ): static {
+        return new static($width, $height, $format_spec, $renderer);
+    }
+
+    /**
+     * Default working / dump layout for SDL RGBA8888 soft surfaces.
      */
     public static function rgbaSpec(): FormatSpec
     {
         return new FormatSpec(PixelFormat::ROW_MAJOR, BitDepth::B32, endianness: Endianness::MSB);
-    }
-
-    public function formatSpec(): FormatSpec
-    {
-        return $this->format_spec;
     }
 
     public function sdlRenderer(): SDLRenderer
@@ -128,8 +131,6 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
     {
         return ! is_null($this->surface);
     }
-
-    // -- Physical-space SDL primitives ----------------------------------------
 
     public function point(int $x, int $y, int $color): static
     {
@@ -150,13 +151,15 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
     public function fillRectRaw(int $x, int $y, int $width, int $height, int $color): static
     {
         $this->applyColor($color);
-        // ext-sdl3 rects are flat [x, y, w, h] lists
         Render::renderFillRect($this->renderer, [$x, $y, $width, $height]);
 
         return $this;
     }
 
-    public function clear(int $color): static
+    /**
+     * Engine clear of the whole drawable (replaces the old clear(int $color) API).
+     */
+    public function fill(int $color): static
     {
         $this->applyColor($color);
         Render::renderClear($this->renderer);
@@ -164,26 +167,11 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
         return $this;
     }
 
-    /**
-     * Flush queued draw commands so read-backs observe every prior call.
-     */
     public function present(): static
     {
         Render::renderPresent($this->renderer);
 
         return $this;
-    }
-
-    // -- Framebuffer contract --------------------------------------------------
-
-    public function viewportWidth(): int
-    {
-        return $this->width;
-    }
-
-    public function viewportHeight(): int
-    {
-        return $this->height;
     }
 
     public function getPixel(int $x, int $y): int
@@ -206,30 +194,6 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
         return $this->point($x, $y, $value);
     }
 
-    /**
-     * @param  array<int, array{0: int, 1: int, 2: int}>  $pixels
-     */
-    public function setPixels(array $pixels): static
-    {
-        foreach ($pixels as [$x, $y, $value]) {
-            $this->setPixel($x, $y, $value);
-        }
-
-        return $this;
-    }
-
-    /**
-     * @param  array<int, array{0: int, 1: int}>  $coordinates
-     */
-    public function setRegion(array $coordinates, int $value): static
-    {
-        foreach ($coordinates as [$x, $y]) {
-            $this->setPixel($x, $y, $value);
-        }
-
-        return $this;
-    }
-
     public function setSegment(int $x, int $y, int $width, int $height, int $color): static
     {
         if (($width <= 0) || ($height <= 0)) {
@@ -239,27 +203,7 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
         return $this->fillRectRaw($x, $y, $width, $height, $color);
     }
 
-    public function blitFrom(Framebuffer $source, int $offset_x = 0, int $offset_y = 0): Framebuffer
-    {
-        for ($y = 0; $y < $source->viewportHeight(); $y++) {
-            for ($x = 0; $x < $source->viewportWidth(); $x++) {
-                $this->setPixel($offset_x + $x, $offset_y + $y, $source->getPixel($x, $y));
-            }
-        }
-
-        return $this;
-    }
-
-    public function blitTo(Framebuffer $target, int $offset_x = 0, int $offset_y = 0): Framebuffer
-    {
-        return $target->blitFrom($this, $offset_x, $offset_y);
-    }
-
-    // -- Read-back / export ----------------------------------------------------
-
     /**
-     * The whole target as flat row-major 0xRRGGBBAA words.
-     *
      * @return array<int, int>
      */
     public function readPixelWords(): array
@@ -269,160 +213,60 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
         if ($this->isHeadless()) {
             $result = Surface::readSurfacePixels($this->surface);
 
-            return array_values($result['pixels_data'] ?? []);
+            if (isset($result['pixels_data']) && is_array($result['pixels_data'])) {
+                return array_values($result['pixels_data']);
+            }
+
+            return array_values($result);
         }
 
         $result = Render::renderReadPixels($this->renderer);
 
-        return array_values($result['pixels']['data'] ?? []);
+        return array_values($result['pixels']['data'] ?? $result['pixels'] ?? []);
+    }
+
+    public function dump(?int $layer = null): string
+    {
+        return $this->packWords($this->readPixelWords(), $this->host_format);
     }
 
     /**
-     * @return array<int, DumpedBuffer>
+     * @return string|array<int, DumpedBuffer|int>
      */
-    public function dump(): array
+    public function flush(FormatSpec $spec, bool $as_array = false): string|array
     {
-        $words = $this->readPixelWords();
+        if (! $this->isHeadless()) {
+            $this->present();
 
-        // Working B32 ROW_MAJOR already matches dump layout — pack words
-        // straight to bytes and skip the width×height nested array.
-        if (
-            $this->format_spec->bit_depth === BitDepth::B32
-            && $this->format_spec->pixel_format === PixelFormat::ROW_MAJOR
-            && ($this->format_spec->endianness ?? Endianness::MSB) === Endianness::MSB
-        ) {
-            $bytes = [];
-
-            foreach ($words as $word) {
-                $bytes[] = ($word >> 24) & 0xFF;
-                $bytes[] = ($word >> 16) & 0xFF;
-                $bytes[] = ($word >> 8) & 0xFF;
-                $bytes[] = $word & 0xFF;
-            }
-
-            return [
-                new DumpedBuffer(
-                    RenderType::FULL,
-                    $this->format_spec,
-                    $bytes,
-                    width: $this->width,
-                    height: $this->height,
-                ),
-            ];
+            return $as_array ? [] : '';
         }
 
-        $pixels = [];
+        $bytes = $this->packWords($this->readPixelWords(), $spec);
 
-        for ($y = 0; $y < $this->height; $y++) {
-            $row = [];
-
-            for ($x = 0; $x < $this->width; $x++) {
-                $row[] = $this->unmapColor($words[($y * $this->width) + $x] ?? 0);
-            }
-
-            $pixels[] = $row;
+        if (! $as_array) {
+            return $bytes;
         }
 
         return [
             new DumpedBuffer(
                 RenderType::FULL,
-                $this->format_spec,
-                PixelPackers::resolve($this->format_spec->pixel_format)->pack(
-                    $pixels,
-                    $this->format_spec,
-                    $this->width,
-                    $this->height,
-                ),
+                $spec,
+                $bytes,
                 width: $this->width,
                 height: $this->height,
             ),
         ];
     }
 
-    /**
-     * Windowed (attached) buffers already draw into the display's SDL
-     * renderer — present in place and skip the readback→pack→upload path.
-     *
-     * @return array<int, DumpedBuffer>
-     */
-    public function flush(): array
-    {
-        if (! $this->isHeadless()) {
-            $this->present();
-
-            return [];
-        }
-
-        return $this->dump();
-    }
-
-    /**
-     * Rebind a headless buffer onto a windowed SDL3 panel's live renderer.
-     *
-     * Called by PendingVisualPresentation when the display panel exposes
-     * renderer() (SDL3Window). Returns $this when already attached or when
-     * the display has no SDL renderer to share.
-     */
-    public function bindDisplaySurface(Display $display): static
-    {
-        if (! $this->isHeadless()) {
-            return $this;
-        }
-
-        if (! method_exists($display, 'panel')) {
-            return $this;
-        }
-
-        $panel = $display->panel();
-
-        if (! is_object($panel) || ! method_exists($panel, 'renderer')) {
-            return $this;
-        }
-
-        $renderer = $panel->renderer();
-
-        if (! $renderer instanceof SDLRenderer) {
-            return $this;
-        }
-
-        return static::attachedTo(
-            $renderer,
-            $this->format_spec,
-            $this->width,
-            $this->height,
-        );
-    }
-
-    public function supportsDisplay(Display $display): bool
-    {
-        return true;
-    }
-
-    public function supportsRenderer(GFXRenderer $renderer): bool
-    {
-        return true;
-    }
-
-    /**
-     * Dumps are always RenderType::FULL and attached buffers present natively,
-     * so there is no sub-surface transmit unit to snap damage to.
-     */
     public function damageGranularity(): DamageGranularity
     {
         return DamageGranularity::wholeSurface($this->width, $this->height);
     }
 
-    /**
-     * Headless buffers keep their offscreen surface, but SDL leaves a windowed
-     * renderer's backbuffer undefined once presented, so retained partial
-     * repaint cannot be trusted there.
-     */
     public function preservesContentsOnPresent(): bool
     {
         return $this->isHeadless();
     }
-
-    // -- Color seam --------------------------------------------------------------
 
     protected function applyColor(int $color): void
     {
@@ -432,8 +276,6 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
     }
 
     /**
-     * GFX color int (in working-spec terms) → RGBA draw color.
-     *
      * @return array{0: int, 1: int, 2: int, 3: int}
      */
     public function mapColor(int $color): array
@@ -442,7 +284,7 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
             return ($color === 0) ? [0, 0, 0, 255] : [255, 255, 255, 255];
         }
 
-        return match ($this->format_spec->bit_depth) {
+        return match ($this->host_format->bit_depth) {
             BitDepth::B8 => [$color & 0xFF, $color & 0xFF, $color & 0xFF, 255],
             BitDepth::B12 => $this->expandRgb444($color),
             BitDepth::B16 => $this->expandRgb565($color),
@@ -452,9 +294,6 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
         };
     }
 
-    /**
-     * RGBA8888 word read back from SDL → GFX color int in working-spec terms.
-     */
     public function unmapColor(int $rgba_word): int
     {
         $r = ($rgba_word >> 24) & 0xFF;
@@ -465,7 +304,7 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
             return (($r > 127) || ($g > 127) || ($b > 127)) ? 1 : 0;
         }
 
-        return match ($this->format_spec->bit_depth) {
+        return match ($this->host_format->bit_depth) {
             BitDepth::B8 => $r,
             BitDepth::B12 => (($r >> 4) << 8) | (($g >> 4) << 4) | ($b >> 4),
             BitDepth::B16 => (($r >> 3) << 11) | (($g >> 2) << 5) | ($b >> 3),
@@ -477,15 +316,60 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
 
     protected function isMonochrome(): bool
     {
-        return ($this->format_spec->bit_depth === BitDepth::B1)
-            || ($this->format_spec->pixel_format === PixelFormat::MONO_VERTICAL_PAGE)
-            || ($this->format_spec->pixel_format === PixelFormat::MONO_HORIZONTAL);
+        return ($this->host_format->bit_depth === BitDepth::B1)
+            || ($this->host_format->pixel_format === PixelFormat::MONO_VERTICAL_PAGE)
+            || ($this->host_format->pixel_format === PixelFormat::MONO_HORIZONTAL);
     }
 
     /**
-     * 5/6-bit channels expanded by bit replication (31 → 255, 63 → 255) —
-     * identical math to the framework's Rgb565ToRgbaEncoder.
-     *
+     * @param  array<int, int>  $words
+     */
+    protected function packWords(array $words, FormatSpec $spec): string
+    {
+        if (
+            $spec->bit_depth === BitDepth::B32
+            && $spec->pixel_format === PixelFormat::ROW_MAJOR
+            && ($spec->endianness ?? Endianness::MSB) === Endianness::MSB
+        ) {
+            $bytes = '';
+
+            foreach ($words as $word) {
+                $bytes .= chr(($word >> 24) & 0xFF)
+                    .chr(($word >> 16) & 0xFF)
+                    .chr(($word >> 8) & 0xFF)
+                    .chr($word & 0xFF);
+            }
+
+            return $bytes;
+        }
+
+        $bytes = '';
+
+        foreach ($words as $word) {
+            $color = $this->unmapColor($word);
+            $bytes .= $this->packColorBytes($color, $spec);
+        }
+
+        return $bytes;
+    }
+
+    protected function packColorBytes(int $color, FormatSpec $spec): string
+    {
+        return match ($spec->bit_depth) {
+            BitDepth::B8 => chr($color & 0xFF),
+            BitDepth::B16 => (($spec->endianness ?? Endianness::MSB) === Endianness::LSB)
+                ? chr($color & 0xFF).chr(($color >> 8) & 0xFF)
+                : chr(($color >> 8) & 0xFF).chr($color & 0xFF),
+            BitDepth::B24 => chr(($color >> 16) & 0xFF).chr(($color >> 8) & 0xFF).chr($color & 0xFF),
+            BitDepth::B32 => chr(($color >> 24) & 0xFF)
+                .chr(($color >> 16) & 0xFF)
+                .chr(($color >> 8) & 0xFF)
+                .chr($color & 0xFF),
+            default => chr(($color >> 16) & 0xFF).chr(($color >> 8) & 0xFF).chr($color & 0xFF),
+        };
+    }
+
+    /**
      * @return array{0: int, 1: int, 2: int, 3: int}
      */
     protected function expandRgb444(int $color): array
@@ -502,6 +386,9 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
         ];
     }
 
+    /**
+     * @return array{0: int, 1: int, 2: int, 3: int}
+     */
     protected function expandRgb565(int $color): array
     {
         $r5 = ($color >> 11) & 0x1F;
@@ -517,8 +404,6 @@ class Sdl3Framebuffer implements SoftwareRenderableFramebuffer
     }
 
     /**
-     * Left-justified RGB666 word → RGBA draw color.
-     *
      * @return array{0: int, 1: int, 2: int, 3: int}
      */
     protected function expandRgb666(int $color): array

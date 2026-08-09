@@ -2,9 +2,9 @@
 
 namespace Microscrap\GFX\SDL3;
 
-use Fabricate\Contracts\Rendering\RenderingException;
+use ScrapyardIO\Tubes\Contracts\Framebuffers\FramebufferException;
 
-class Sdl3GFXException extends RenderingException
+class Sdl3GFXException extends FramebufferException
 {
     public static function surfaceCreationFailed(int $width, int $height, string $sdl_error = ''): static
     {
@@ -27,6 +27,6 @@ class Sdl3GFXException extends RenderingException
 
     public static function unsupportedFramebuffer(string $class): static
     {
-        return new static("SDL3 rendering requires an ".Sdl3Framebuffer::class."; {$class} given.");
+        return new static('SDL3 rendering requires an '.Sdl3Framebuffer::class."; {$class} given.");
     }
 }

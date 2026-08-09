@@ -2,44 +2,45 @@
 
 namespace Microscrap\GFX\SDL3\Providers;
 
-use Fabricate\Contracts\Chassis\BindingResolutionException;
-use Fabricate\Contracts\Framebuffers\BufferFactory as FramebufferFactory;
-use Fabricate\Framebuffers\FormatSpec;
 use Fabricate\NutsAndBolts\ServiceProvider;
-use Fabricate\Rendering\RenderManager;
-use Microscrap\GFX\SDL3\Console\InstallSdl3DisplayCommand;
 use Microscrap\GFX\SDL3\Sdl3Framebuffer;
-use Microscrap\GFX\SDL3\SDL3GFXRenderDriver;
+use Microscrap\GFX\SDL3\SDL3WindowHandler;
+use ScrapyardIO\Tubes\Contracts\Framebuffers\BufferFactory;
+use ScrapyardIO\Tubes\Contracts\Windows\WindowFactory;
+use ScrapyardIO\Tubes\Framebuffers\PendingFramebuffer;
 
 class SDL3GfxServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->program->singleton(InstallSdl3DisplayCommand::class);
-
-        $this->commands([
-            InstallSdl3DisplayCommand::class,
-        ]);
+        //
     }
 
-    /**
-     * @throws BindingResolutionException
-     */
     public function boot(): void
     {
-        $this->callAfterResolving('framebuffer', function (FramebufferFactory $framebuffers) {
-            $framebuffers->extend(
+        if ($this->container->runningInConsole()) {
+            $this->publishes([
+                __DIR__.'/../../config/framebuffers/sdl3.php' => $this->container->configPath('framebuffers/sdl3.php'),
+            ], 'tubes-framebuffers-sdl3');
+
+            $this->publishes([
+                __DIR__.'/../../config/windows/sdl3.php' => $this->container->configPath('windows/sdl3.php'),
+            ], 'tubes-windows-sdl3');
+        }
+
+        $this->callAfterResolving('framebuffer', function (BufferFactory $framebuffers): void {
+            $framebuffers->extendDeferred(
                 'sdl3',
-                fn (int $width, int $height, FormatSpec $formatSpec) => new Sdl3Framebuffer(
-                    $formatSpec,
-                    $width,
-                    $height,
+                fn (PendingFramebuffer $pending) => Sdl3Framebuffer::sized(
+                    $pending->widthValue(),
+                    $pending->heightValue(),
+                    $pending->hostFormatValue(),
                 ),
             );
         });
 
-        $this->callAfterResolving('gfx', function (RenderManager $renderers) {
-            $renderers->extend('sdl3', fn () => new SDL3GFXRenderDriver);
+        $this->callAfterResolving('window', function (WindowFactory $windows): void {
+            $windows->extend('sdl3', SDL3WindowHandler::class);
         });
     }
 }

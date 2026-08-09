@@ -35,7 +35,7 @@ class SDL3Gfx extends Renderer2D
      */
     public static function headless(int $width, int $height, ?FormatSpec $format_spec = null): static
     {
-        return new static(new Sdl3Framebuffer($format_spec ?? Sdl3Framebuffer::rgbaSpec(), $width, $height));
+        return new static(new Sdl3Framebuffer($width, $height, $format_spec ?? Sdl3Framebuffer::rgbaSpec()));
     }
 
     /**
@@ -127,7 +127,7 @@ class SDL3Gfx extends Renderer2D
             return $this->fillRect($clip->x, $clip->y, $clip->width, $clip->height, $color);
         }
 
-        $this->requireBuffer()->clear($color);
+        $this->requireBuffer()->fill($color);
 
         return $this;
     }
@@ -157,7 +157,7 @@ class SDL3Gfx extends Renderer2D
      */
     public static function preferredFramebuffer(FormatSpec $format_spec, int $width, int $height): Framebuffer
     {
-        return new Sdl3Framebuffer($format_spec, $width, $height);
+        return new Sdl3Framebuffer($width, $height, $format_spec);
     }
 
     /**

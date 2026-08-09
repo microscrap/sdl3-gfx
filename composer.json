@@ -1,9 +1,13 @@
 {
     "name": "microscrap/sdl3-gfx",
-    "description": "SDL3-native Rendering Package for the ScrapyardIO Framework",
+    "description": "SDL3 plugin for ScrapyardIO Tubes — DeferredFramebuffer, WindowHandler, Rendering Engine, and Input Handler.",,
     "license": "MIT",
-    "homepage": "https://scrapyard-io.projectsaturnstudios.com",
-    "version": "0.6.4",
+    "homepage": "https://scrapyard-io.projectsaturnstudios.com/ecosystem/microscrap/sdl3-gfx/0.7.x/overview",
+    "support": {
+        "issues": "https://github.com/DeptOfScrapyardRobotics/sdl3-gfx/issues",
+        "source": "https://github.com/DeptOfScrapyardRobotics/sdl3-gfx"
+    },
+    "version": "0.7.0",
     "authors": [
         {
             "name": "Angel Gonzalez",
@@ -11,17 +15,27 @@
         }
     ],
     "require": {
-        "php": "^8.3",
-        "ext-sdl3": "^0.5.0",
-        "fabricate/framebuffers": "^0.6.0",
-        "fabricate/nuts-and-bolts": "^0.6.0",
-        "fabricate/rendering": "^0.6.0",
-        "microscrap/sdl3": "^0.5.0",
-        "fabricate/contracts": "^0.6.0"
+        "php": "^8.4|^8.5|^8.6",
+        "ext-sdl3": "^0.7.0",
+        "fabricate/nuts-and-bolts": "^0.7.0",
+        "microscrap/sdl3": "^0.7.0",
+        "scrapyard-io/tubes": "^0.7.0"
     },
     "require-dev": {
         "pestphp/pest": "^4"
     },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../sdl3",
+            "options": { "symlink": true }
+        },
+        {
+            "type": "path",
+            "url": "../../scrapyard-io/tubes",
+            "options": { "symlink": true }
+        }
+    ],
     "autoload": {
         "psr-4": {
             "Microscrap\\GFX\\SDL3\\": "src/"
@@ -46,7 +60,9 @@
             ]
         },
         "branch-alias": {
-            "dev-master": "0.6.x-dev"
+            "dev-master": "0.7.x-dev",
+            "dev-main": "0.7.x-dev"
         }
-    }
+    },
+    "prefer-stable": true
 }
