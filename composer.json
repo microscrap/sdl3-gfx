@@ -1,13 +1,13 @@
 {
     "name": "microscrap/sdl3-gfx",
-    "description": "SDL3 plugin for ScrapyardIO Tubes — DeferredFramebuffer, WindowHandler, Rendering Engine, and Input Handler.",,
+    "description": "SDL3 plugin for ScrapyardIO Tubes — DeferredFramebuffer, WindowHandler, Rendering Engine, and Input Handler.",
     "license": "MIT",
     "homepage": "https://scrapyard-io.projectsaturnstudios.com/ecosystem/microscrap/sdl3-gfx/0.7.x/overview",
     "support": {
         "issues": "https://github.com/DeptOfScrapyardRobotics/sdl3-gfx/issues",
         "source": "https://github.com/DeptOfScrapyardRobotics/sdl3-gfx"
     },
-    "version": "0.7.0",
+    "version": "0.7.1",
     "authors": [
         {
             "name": "Angel Gonzalez",
