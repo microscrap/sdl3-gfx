@@ -34,14 +34,17 @@ No OS window. Works under dummy/headless CI.
 
 `attachedTo(SDLRenderer, FormatSpec, w, h)` borrows a live renderer (never destroyed by this class). `flush` presents in place and does not full-frame dump (avoid OOM on large windowed frames).
 
-## App usage
+## PanelIC / FormatSpec flush (headless)
 
-```php
-Framebuffer::driver('sdl3')
-    ->size(320, 240)
-    ->format($spec)
-    ->create(); // DeferredFramebuffer / Sdl3Framebuffer, headless by default
-```
+Host is always SDL RGBA8888 (`rgbaSpec()`). `PanelIC::present()` flushes the IC FormatSpec (e.g. ST7789 RGB565):
+
+- Dirty rects tracked on draw; coalesced at flush
+- `deferDirty()` unions many primitive marks into one bbox (fillCircle hlines)
+- Whole-surface dirty → `RenderType::FULL`
+- Sparse dirty → `RenderType::PARTIAL` (prefer `Render::renderReadPixels($renderer, $rect)`; else one shared surface read + slice)
+- Matching B32 / ROW_MAJOR B16 → **chunked `pack()`** (not per-pixel `PixelStore` — that crushed Pi0 FPS)
+- Other foreign specs still pack via `PixelStore`
+- `damageGranularity()` is **pixel** when headless (so UX Scene / PanelIC partial path engages)
 
 # Related
 

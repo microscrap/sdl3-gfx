@@ -1,5 +1,10 @@
 # Directory Update Log
 
+## 2026-08-11
+
+* **Perf (draft)**: PanelIC flush hot path — ROW_MAJOR B16 packs via chunked `pack()` (not per-pixel PixelStore); one present + shared surface read per flush; `deferDirty()` for circle bbox. Amended [sdl3-framebuffer](core/sdl3-framebuffer.md).
+* **Fix (draft)**: Headless `Sdl3Framebuffer` dirty tracking + PARTIAL flush; RGBA8888→foreign FormatSpec (RGB565) packs via PixelStore (old packWords mis-treated RGBA as RGB565). `damageGranularity()` pixel when headless for PanelIC partial. Amended [sdl3-framebuffer](core/sdl3-framebuffer.md).
+
 ## 2026-08-09
 
 * **HumanInput (draft)**: [SDL3InputHandler](core/sdl3-input-handler.md) — tubes `InputHandler` for SDL3; `SDL3WindowHandler::pollNative` fans out (`ingestEvent` + snapshot `poll`) before freeing events; Gamepad→`GameController`, non-gamepad Joystick→`GamePad`. Pest `SDL3InputHandlerTest`.
