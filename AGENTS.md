@@ -20,6 +20,7 @@ Before changing GFX/framebuffer code **for this package**:
 - Provider registers **`extendDeferred('sdl3', …)`** + **`WindowFactory::extend('sdl3', …)`** — **not** `extendManaged`. Soft Managed = tubes `full`/`dirty`/`page` only.
 - `Sdl3Framebuffer` implements **`DeferredFramebuffer`**. SDL owns pixels (microscrap/sdl3 Surface/Render API).
 - **Headless default** = off-screen SDL soft surface + software renderer (no window). **Windowed** = `SDL3WindowHandler` → `attachedTo($renderer, …)`.
+- **VSync**: `SDL3WindowHandler::setVsync` → `SDL_SetRenderVSync` (1 / DISABLED). VSync OFF + Uncapped must be allowed to exceed the panel on Darwin and Linux.
 - `SDL3Renderer2D` is the tubes DrawingAPI companion (parity with metal/ogx/vulkan/cuda).
 - Human Input: `SDL3InputHandler` extends tubes `InputHandler`; fan-out lives in `SDL3WindowHandler::pollNative` (one pump for close + devices). Wrap with `EngineInput`. See `.okf/core/sdl3-input-handler.md`.
 - Never model `sdl3` as a PHP `PixelStore` / Managed concrete.

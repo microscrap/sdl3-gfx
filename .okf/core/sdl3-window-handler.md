@@ -21,6 +21,7 @@ status: draft
 | `presentNative()` | `$framebuffer->present()` → `SDL_RenderPresent` |
 | `pollNative()` | Drain `Events::pollEvent`; quit / close-requested → close flag; fan out to [`SDL3InputHandler`](sdl3-input-handler.md) (`ingestEvent` then `poll`) |
 | `inputHandler()` | Lazy shared `SDL3InputHandler` for `EngineInput` |
+| `setVsync(bool)` | `SDL_SetRenderVSync` 1 / DISABLED. VSync OFF + Uncapped must be allowed to exceed the panel (Darwin and Linux). |
 | `shouldClose()` | Close flag or null window |
 | `close()` / `destroyNative()` | Close input natives, drop FB, destroy renderer + window; does **not** call `SDL_Quit` |
 
@@ -40,5 +41,6 @@ Requires **ext-sdl3 ≥ 0.5.0** and `microscrap/sdl3`.
 
 - tubes `.okf/core/window-handler.md`
 - [Sdl3Framebuffer](sdl3-framebuffer.md)
+- [SDL3 VSync](vsync.md)
 - [SDL3InputHandler](sdl3-input-handler.md)
 - [SDL3Renderer2D](sdl3-renderer-2d.md)

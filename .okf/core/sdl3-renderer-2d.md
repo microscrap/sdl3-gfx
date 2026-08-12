@@ -24,3 +24,4 @@ Present stays on the WindowHandler / `Sdl3Framebuffer::present()` path (`SDL_Ren
 
 - [Sdl3Framebuffer](sdl3-framebuffer.md)
 - [SDL3WindowHandler](sdl3-window-handler.md)
+- [SDL3 VSync](vsync.md)

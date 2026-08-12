@@ -33,7 +33,7 @@ php workshop vendor:publish --tag=tubes-windows-sdl3
 | Registry key | Role |
 |---|---|
 | Framebuffer `sdl3` | `Sdl3Framebuffer` — **Deferred**; default headless SDL soft surface |
-| Window `sdl3` | `SDL3WindowHandler` — live SDL window + renderer present |
+| Window `sdl3` | `SDL3WindowHandler` — live SDL window + renderer present; `setVsync` → `SDL_SetRenderVSync` (1 / DISABLED). VSync OFF + Uncapped must be allowed to exceed the panel. |
 
 DrawingAPI: `SDL3Renderer2D` (tubes `Renderer2D` + `DrawsText`). Fabricate `gfx` registry registration remains deferred until Rendering restores.
 

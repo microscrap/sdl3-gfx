@@ -34,6 +34,8 @@ class SDL3WindowHandler extends WindowHandler
 
     protected ?SDL3InputHandler $input_handler = null;
 
+    protected bool $vsync = false;
+
     protected function defineFormatSpec(): FormatSpec
     {
         return Sdl3Framebuffer::rgbaSpec();
@@ -84,6 +86,7 @@ class SDL3WindowHandler extends WindowHandler
         // Drop quit/destroy leftovers from prior windows in the same PHP process
         // (Pest opens several short-lived windows back-to-back).
         Events::flushEvents(EventType::SDL_EVENT_FIRST, EventType::SDL_EVENT_LAST);
+        $this->setVsync($this->vsync);
     }
 
     protected function bindFramebuffer(): DeferredFramebuffer
@@ -181,5 +184,25 @@ class SDL3WindowHandler extends WindowHandler
     public function sdlRenderer(): ?SDLRenderer
     {
         return $this->renderer;
+    }
+
+    /**
+     * SDL_SetRenderVSync: on = 1, off = DISABLED (0).
+     */
+    public function setVsync(bool $on): static
+    {
+        $this->vsync = $on;
+
+        if (! is_null($this->renderer)) {
+            $value = $on ? 1 : \Microscrap\Bindings\SDL3\Enums\RendererVSync::SDL_RENDERER_VSYNC_DISABLED;
+            Render::setRenderVSync($this->renderer, $value);
+        }
+
+        return $this;
+    }
+
+    public function vsync(): bool
+    {
+        return $this->vsync;
     }
 }

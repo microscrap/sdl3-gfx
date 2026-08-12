@@ -41,6 +41,7 @@ Requires:
 |------|---------|
 | Managed (tubes built-ins) | `full`, `dirty`, `page` — soft `PixelStore` |
 | Deferred (this package) | `sdl3` — SDL host buffer; headless soft surface or window `attachedTo` |
+| Window (this package) | `sdl3` — `SDL3WindowHandler`; `setVsync` → `SDL_SetRenderVSync` (1 / DISABLED) |
 
 # Related
 
@@ -48,6 +49,7 @@ Requires:
 |-------|---------|
 | Provider | [SDL3GfxServiceProvider](../core/service-provider.md) |
 | Buffer | [Sdl3Framebuffer](../core/sdl3-framebuffer.md) |
+| VSync | [SDL3 VSync](../core/vsync.md) |
 | Bindings | `microscrap/sdl3` |
 
 [^composer]: Package name, version, PHP, providers, deps

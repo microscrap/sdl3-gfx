@@ -1,5 +1,9 @@
 # Directory Update Log
 
+## 2026-08-12
+
+* **VSync core**: [SDL3 VSync](core/vsync.md) — `SDL_SetRenderVSync` 1 / DISABLED. Verified 2026-08-12: VSync OFF + Uncapped 210–324 Hz on a 120 Hz Mac. Default remains off for non-Tetriminos sketches.
+
 ## 2026-08-11
 
 * **Perf (draft)**: PanelIC flush hot path — ROW_MAJOR B16 packs via chunked `pack()` (not per-pixel PixelStore); one present + shared surface read per flush; `deferDirty()` for circle bbox. Amended [sdl3-framebuffer](core/sdl3-framebuffer.md).

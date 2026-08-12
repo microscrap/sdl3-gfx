@@ -49,6 +49,7 @@ Host is always SDL RGBA8888 (`rgbaSpec()`). `PanelIC::present()` flushes the IC 
 # Related
 
 - [SDL3GfxServiceProvider](service-provider.md) — `extendDeferred('sdl3', …)` + publish `tubes-framebuffers-sdl3`
+- [SDL3WindowHandler](sdl3-window-handler.md) / [SDL3 VSync](vsync.md)
 - [Window attach](../traps/window-attach-deferred.md) — windowed path via `attachedTo`
 
 [^fb]: Sdl3Framebuffer

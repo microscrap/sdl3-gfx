@@ -22,6 +22,7 @@ Read this index first; open only the concepts needed for the task.
 * [SDL3GfxServiceProvider](core/service-provider.md) - Discovers; framebuffer + window `extend` + publish stubs.
 * [Sdl3Framebuffer](core/sdl3-framebuffer.md) - Deferred SDL-owned buffer; default headless soft surface.
 * [SDL3WindowHandler](core/sdl3-window-handler.md) - tubes WindowHandler slug `sdl3` (live window+renderer).
+* [SDL3 VSync](core/vsync.md) - `SDL_SetRenderVSync` 1 / DISABLED; Uncapped must exceed the panel. (`draft`)
 * [SDL3InputHandler](core/sdl3-input-handler.md) - tubes InputHandler; poll fan-out from WindowHandler. (`draft`)
 * [SDL3Renderer2D](core/sdl3-renderer-2d.md) - DrawingAPI on borrowed `Sdl3Framebuffer`.
 
